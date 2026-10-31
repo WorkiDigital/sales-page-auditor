@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { scoreAudit } from './lib/score.mjs';
 
 const clean = x => String(x ?? 'Não informado').replace(/\r/g, '').replace(/\0/g, '').trim();
@@ -60,7 +61,7 @@ export async function runReport(inputPath, outputPath) {
   await writeFile(outputPath, text, 'utf8');
   return outputPath;
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const input = args[args.indexOf('--input') + 1];
   const output = args[args.indexOf('--out') + 1];
