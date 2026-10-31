@@ -1,0 +1,19 @@
+{
+  "name": "sales-page-auditor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "capture": "node scripts/capture.mjs",
+    "report": "node scripts/report.mjs",
+    "verify": "node scripts/verify.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "smoke": "node scripts/capture.mjs https://example.com --out output/smoke"
+  },
+  "dependencies": {
+    "playwright": "1.55.0"
+  }
+}
