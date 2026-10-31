@@ -1,5 +1,7 @@
 # Sales Page Auditor
 
+[![CI](https://github.com/WorkiDigital/sales-page-auditor/actions/workflows/ci.yml/badge.svg)](https://github.com/WorkiDigital/sales-page-auditor/actions/workflows/ci.yml)
+
 Ferramenta profissional para o Claude Code auditar páginas de vendas
 (landing pages), combinando:
 
@@ -23,7 +25,8 @@ sales-page-auditor/
 │   └── references/
 │       ├── FRAMEWORKS.md        # metodologias (Schwartz, Halbert, Hormozi, Brunson, Miller)
 │       ├── RUBRIC.md            # rubrica de 100 pontos documentada
-│       └── REPORT_TEMPLATE.md   # template do relatório executivo
+│       ├── REPORT_TEMPLATE.md   # template do relatório executivo
+│       └── INTEGRATIONS.md      # avaliação de licenças + integração opcional com skills externas
 ├── scripts/
 │   ├── capture.mjs              # captura real (Playwright): screenshots + extração
 │   ├── rubric.mjs               # pesos da rubrica + cálculo de nota (fonte de verdade)
@@ -57,6 +60,10 @@ Em redes restritas, isso pode falhar — ver "Limitações" abaixo.
 ```bash
 npm run verify
 ```
+
+O GitHub Actions (`.github/workflows/ci.yml`) roda `npm ci` + instalação do
+Chromium + `npm run verify` em Node 20.x e 22.x a cada push/PR, para que a
+suite completa (incluindo captura real) seja validada automaticamente.
 
 Executa `scripts/verify.mjs`: checa a estrutura de arquivos obrigatórios, o
 frontmatter do `SKILL.md`, a consistência da rubrica (`scripts/rubric.mjs`
@@ -164,10 +171,14 @@ nota **nunca** representa previsão de taxa de conversão.
 ## Skills complementares (opcionais, não obrigatórias)
 
 Esta skill funciona de forma independente. Em ambientes onde também existam
-skills de copywriting de resposta direta/landing page ou de design de
-frontend, elas podem ser usadas para enriquecer sugestões de texto ou a
-direção visual de um redesign — mas nunca são pré-requisito. Consulte
-`.claude/skills/sales-page-auditor/SKILL.md`, seção "Skills complementares".
+skills de copywriting de resposta direta/landing page (robpalmer99,
+CC-BY-4.0) ou de design de frontend (anthropics/skills, Apache-2.0), elas
+podem ser usadas para enriquecer sugestões de texto ou a direção visual de
+um redesign — mas nunca são pré-requisito, e nenhum conteúdo delas foi
+copiado para este repositório. Avaliação completa de licença e
+compatibilidade em
+`.claude/skills/sales-page-auditor/references/INTEGRATIONS.md`; pontos de
+uso em `SKILL.md`, seção "Skills complementares".
 
 ## Limitações conhecidas
 

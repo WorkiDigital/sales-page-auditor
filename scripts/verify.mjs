@@ -12,7 +12,14 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 import { CRITERIA, TOTAL_WEIGHT, computeScore } from './rubric.mjs';
-import { assertUrlIsSafe, isPrivateIp, slugify, UnsafeUrlError } from './capture.mjs';
+import {
+  assertUrlIsSafe,
+  assertHostIsPublic,
+  evaluateRequestUrl,
+  isPrivateIp,
+  slugify,
+  UnsafeUrlError,
+} from './capture.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(__filename), '..');
@@ -51,6 +58,7 @@ const REQUIRED_FILES = [
   '.claude/skills/sales-page-auditor/references/FRAMEWORKS.md',
   '.claude/skills/sales-page-auditor/references/RUBRIC.md',
   '.claude/skills/sales-page-auditor/references/REPORT_TEMPLATE.md',
+  '.claude/skills/sales-page-auditor/references/INTEGRATIONS.md',
   'scripts/capture.mjs',
   'scripts/verify.mjs',
   'scripts/rubric.mjs',
@@ -58,6 +66,7 @@ const REQUIRED_FILES = [
   'README.md',
   'package.json',
   '.gitignore',
+  '.github/workflows/ci.yml',
 ];
 
 for (const f of REQUIRED_FILES) {
@@ -83,6 +92,21 @@ await check('SKILL.md documents the /sales-page-auditor command and its argument
   const content = await readFile('.claude/skills/sales-page-auditor/SKILL.md');
   assert.ok(content.includes('/sales-page-auditor'), 'command name not documented');
   assert.ok(/foco em copy|foco visual|reestrutur/i.test(content), 'complementary instruction forms not documented');
+});
+
+console.log('== Optional external skill integration ==');
+
+await check('SKILL.md references INTEGRATIONS.md and never requires external skills', async () => {
+  const content = await readFile('.claude/skills/sales-page-auditor/SKILL.md');
+  assert.ok(content.includes('INTEGRATIONS.md'), 'SKILL.md should point to references/INTEGRATIONS.md');
+  assert.ok(/funciona.*sem|autossuficiente/i.test(content), 'SKILL.md should state the skill works without external skills');
+});
+
+await check('INTEGRATIONS.md documents license + compatibility for all three external repos', async () => {
+  const content = await readFile('.claude/skills/sales-page-auditor/references/INTEGRATIONS.md');
+  for (const marker of ['coreyhaines31/marketingskills', 'robpalmer99/claude-code-copywriting-skills', 'anthropics/skills', 'MIT', 'CC-BY-4.0', 'Apache-2.0']) {
+    assert.ok(content.includes(marker), `INTEGRATIONS.md missing "${marker}"`);
+  }
 });
 
 console.log('== Rubric ==');
@@ -162,6 +186,82 @@ await check('slugify produces a filesystem-safe, non-empty slug', () => {
   const slug = slugify('https://example.com/landing?utm=1&x=2');
   assert.ok(/^[a-zA-Z0-9.-]+$/.test(slug));
   assert.ok(slug.length > 0);
+});
+
+await check('isPrivateIp covers additional reserved/benchmarking/test-net ranges', () => {
+  assert.equal(isPrivateIp('192.0.0.5'), true, '192.0.0.0/24 IETF protocol assignments');
+  assert.equal(isPrivateIp('198.18.0.1'), true, '198.18.0.0/15 benchmarking');
+  assert.equal(isPrivateIp('198.51.100.7'), true, 'TEST-NET-2');
+  assert.equal(isPrivateIp('203.0.113.9'), true, 'TEST-NET-3');
+  assert.equal(isPrivateIp('240.0.0.1'), true, 'reserved 240.0.0.0/4');
+  assert.equal(isPrivateIp('1.1.1.1'), false, 'public resolver should remain allowed');
+});
+
+console.log('== Subresource / redirect SSRF coverage (evaluateRequestUrl) ==');
+
+await check('evaluateRequestUrl blocks subresource requests to private IPs (not just top-level navigation)', async () => {
+  const imgResult = await evaluateRequestUrl('http://169.254.169.254/latest/meta-data/', new Map());
+  assert.equal(imgResult.allow, false);
+  assert.match(imgResult.reason, /private|reserved/i);
+
+  const xhrResult = await evaluateRequestUrl('https://10.0.0.5/internal-api', new Map());
+  assert.equal(xhrResult.allow, false);
+});
+
+await check('evaluateRequestUrl blocks non-http(s) request schemes (file:, ftp:) used by subresources', async () => {
+  const fileResult = await evaluateRequestUrl('file:///etc/passwd', new Map());
+  assert.equal(fileResult.allow, false);
+  const ftpResult = await evaluateRequestUrl('ftp://example.com/x', new Map());
+  assert.equal(ftpResult.allow, false);
+});
+
+await check('evaluateRequestUrl allows safe non-network schemes used internally by pages/browser (data:, blob:, about:)', async () => {
+  const dataResult = await evaluateRequestUrl('data:image/png;base64,iVBORw0KGgo=', new Map());
+  assert.equal(dataResult.allow, true);
+  const blobResult = await evaluateRequestUrl('blob:https://example.com/abc-123', new Map());
+  assert.equal(blobResult.allow, true);
+  const aboutResult = await evaluateRequestUrl('about:blank', new Map());
+  assert.equal(aboutResult.allow, true);
+});
+
+await check('evaluateRequestUrl validates ws:/wss: subresource requests like http(s)', async () => {
+  const wsResult = await evaluateRequestUrl('ws://127.0.0.1:9999/socket', new Map());
+  assert.equal(wsResult.allow, false);
+  const wssResult = await evaluateRequestUrl('wss://1.1.1.1/socket', new Map());
+  assert.equal(wssResult.allow, true);
+});
+
+await check('evaluateRequestUrl caches per-hostname results (repeat subresources skip a fresh DNS lookup)', async () => {
+  const cache = new Map();
+  const first = await evaluateRequestUrl('https://1.1.1.1/a.js', cache);
+  assert.equal(first.allow, true);
+  assert.ok(cache.has('1.1.1.1'));
+  // Second call for the same host must hit the cache and return the same verdict
+  // without needing a working DNS/network path — we simulate this by poisoning
+  // the cache entry and confirming evaluateRequestUrl trusts it instead of
+  // re-resolving, which is the behavior under test.
+  cache.set('1.1.1.1', { allow: false, reason: 'simulated cached block' });
+  const second = await evaluateRequestUrl('https://1.1.1.1/b.css', cache);
+  assert.equal(second.allow, false);
+  assert.equal(second.reason, 'simulated cached block');
+});
+
+await check('evaluateRequestUrl rejects malformed subresource URLs instead of throwing', async () => {
+  const result = await evaluateRequestUrl('not a url at all', new Map());
+  assert.equal(result.allow, false);
+});
+
+await check('assertHostIsPublic refuses literal private/cloud-metadata IPs and *.internal hostnames', async () => {
+  // dns.lookup with {all:true} returns every A/AAAA record for a hostname; if
+  // ANY of them is private, the whole hostname is refused — this is the
+  // property that narrows (without eliminating) DNS-rebinding exposure for
+  // multi-homed names. Reproducing a resolver that returns mixed public+
+  // private records isn't possible without controlling DNS in this
+  // environment, so this test asserts the documented contract against known
+  // literals instead.
+  await assert.rejects(() => assertHostIsPublic('127.0.0.1'), UnsafeUrlError);
+  await assert.rejects(() => assertHostIsPublic('169.254.169.254'), UnsafeUrlError);
+  await assert.rejects(() => assertHostIsPublic('metadata.internal'), UnsafeUrlError);
 });
 
 console.log('== Playwright / browser availability ==');

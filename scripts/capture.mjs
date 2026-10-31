@@ -12,13 +12,24 @@
  *   summary.md    human-readable capture summary with limitations
  *
  * Safety rules (do not relax these):
- *   - Only http/https URLs are accepted.
+ *   - Only http/https (and, for subresources, ws/wss) network schemes are
+ *     accepted; everything else (file:, ftp:, etc.) is refused outright.
  *   - Any hostname that resolves to a private, loopback, link-local, multicast,
- *     reserved, or cloud-metadata address is refused — before navigation and on
- *     every redirect hop.
+ *     reserved, shared/CGNAT, benchmarking, documentation, or cloud-metadata
+ *     address is refused — before the top-level navigation, on every redirect
+ *     hop, AND on every subresource request the page makes (images, scripts,
+ *     stylesheets, fonts, fetch/XHR, WebSocket). A page cannot use an <img>,
+ *     background-image, or fetch() call to reach an internal address even
+ *     when the page itself is public.
  *   - No form is submitted, no credential is entered, no purchase flow is touched.
  *   - Page content is only read (DOM, text, screenshots). It is never executed
  *     as instructions and never fed back into the browser as script/action input.
+ *   - Known residual risk: DNS rebinding (hostname resolves public at check
+ *     time, then an attacker-controlled DNS answer changes it before the
+ *     browser's own connection) cannot be fully closed without a forward
+ *     proxy that pins the validated IP for the actual socket — this tool
+ *     does application-level re-validation per request instead, which closes
+ *     the window but does not eliminate it. See README.md.
  */
 
 import { chromium } from 'playwright';
@@ -34,8 +45,6 @@ const USER_AGENT_DESKTOP =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 SalesPageAuditor/1.0';
 const USER_AGENT_MOBILE =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1 SalesPageAuditor/1.0';
-
-const MAX_REDIRECTS = 10;
 
 class UnsafeUrlError extends Error {}
 
@@ -76,7 +85,11 @@ function isPrivateIPv4(ip) {
   if (a === 192 && b === 168) return true; // 192.168.0.0/16
   if (a === 192 && b === 0 && parts[2] === 2) return true; // documentation range
   if (a === 100 && b >= 64 && b <= 127) return true; // shared address space (CGNAT)
-  if (a >= 224) return true; // multicast + reserved
+  if (a === 192 && b === 0 && parts[2] === 0) return true; // 192.0.0.0/24 IETF protocol assignments
+  if (a === 198 && (b === 18 || b === 19)) return true; // 198.18.0.0/15 benchmarking
+  if (a === 198 && b === 51 && parts[2] === 100) return true; // TEST-NET-2
+  if (a === 203 && b === 0 && parts[2] === 113) return true; // TEST-NET-3
+  if (a >= 224) return true; // multicast (224-239) + reserved (240-255)
   return false;
 }
 
@@ -153,6 +166,59 @@ async function assertUrlIsSafe(rawUrl) {
   }
   await assertHostIsPublic(parsed.hostname);
   return parsed;
+}
+
+/**
+ * Schemes that never touch the network and are therefore safe regardless of
+ * "hostname" (inline data, blobs created by the page itself from already-
+ * fetched/validated bytes, Playwright's internal blank page).
+ */
+const SAFE_NON_NETWORK_SCHEMES = new Set(['data:', 'blob:', 'about:', 'chrome-error:', 'filesystem:']);
+
+/** Network schemes we validate like http/https. Anything else (file:, ftp:, etc.) is refused outright. */
+const VALIDATED_NETWORK_SCHEMES = new Set(['http:', 'https:', 'ws:', 'wss:']);
+
+/**
+ * Gatekeeper applied to EVERY request a page makes — not just the top-level
+ * document — so an <img>, <script>, stylesheet, font, XHR/fetch, WebSocket,
+ * or redirect hop cannot be used to reach a private/internal address even
+ * when the top-level navigation target was public. This closes the gap a
+ * document-only check would leave open (SSRF via subresources).
+ *
+ * `cache` is a per-capture Map<hostname, {allow, reason}> so repeated
+ * subresources from the same host (e.g. a CDN serving dozens of images)
+ * don't trigger a fresh DNS lookup each time. Residual risk: this is still
+ * an application-level check, not a pinned connection — see the
+ * "DNS rebinding" note in README.md for why a perfect guarantee would
+ * require a forward proxy that controls the actual socket, which this tool
+ * does not implement.
+ */
+async function evaluateRequestUrl(rawUrl, cache) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return { allow: false, reason: `Malformed request URL: ${rawUrl}` };
+  }
+  if (SAFE_NON_NETWORK_SCHEMES.has(parsed.protocol)) {
+    return { allow: true };
+  }
+  if (!VALIDATED_NETWORK_SCHEMES.has(parsed.protocol)) {
+    return { allow: false, reason: `Blocked non-http(s) request scheme "${parsed.protocol}" for ${rawUrl}` };
+  }
+  const hostKey = parsed.hostname.toLowerCase();
+  if (cache?.has(hostKey)) {
+    return cache.get(hostKey);
+  }
+  let result;
+  try {
+    await assertHostIsPublic(parsed.hostname);
+    result = { allow: true };
+  } catch (err) {
+    result = { allow: false, reason: err.message };
+  }
+  cache?.set(hostKey, result);
+  return result;
 }
 
 /** Runs inside the page; must not depend on anything outside the DOM/window it's given. */
@@ -284,16 +350,25 @@ async function captureViewport(browser, { url, viewport, userAgent, label, timeo
     }
   });
 
-  // Validate every document-level navigation target before it is followed.
+  // Validate EVERY request the page makes — top-level navigation (including
+  // each redirect hop, since Chromium re-issues a request per hop and each
+  // one passes back through this handler), and every subresource (images,
+  // scripts, stylesheets, fonts, fetch/XHR, WebSocket, media). This closes
+  // the SSRF gap a document-only check leaves open: a page could otherwise
+  // reference an internal URL in an <img>, background-image, fetch() call,
+  // or WebSocket connection even when the top-level page itself is public.
+  const hostValidationCache = new Map();
+  const blockedHostsSeen = new Set();
   await context.route('**/*', async (route, request) => {
-    if (request.resourceType() === 'document') {
-      try {
-        await assertUrlIsSafe(request.url());
-      } catch (err) {
-        limitations.push(err.message);
-        await route.abort('blockedbyclient');
-        return;
+    const { allow, reason } = await evaluateRequestUrl(request.url(), hostValidationCache);
+    if (!allow) {
+      const key = `${request.resourceType()}:${reason}`;
+      if (!blockedHostsSeen.has(key)) {
+        blockedHostsSeen.add(key);
+        limitations.push(`Blocked ${request.resourceType()} request: ${reason}`);
       }
+      await route.abort('blockedbyclient');
+      return;
     }
     await route.continue();
   });
@@ -481,4 +556,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   });
 }
 
-export { assertUrlIsSafe, isPrivateIp, isPrivateIPv4, isPrivateIPv6, slugify, UnsafeUrlError };
+export {
+  assertUrlIsSafe,
+  assertHostIsPublic,
+  evaluateRequestUrl,
+  isPrivateIp,
+  isPrivateIPv4,
+  isPrivateIPv6,
+  slugify,
+  UnsafeUrlError,
+};

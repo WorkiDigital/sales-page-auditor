@@ -146,14 +146,32 @@ busque nem dependa de pacotes externos desses autores para funcionar.
 ## Skills complementares (opcionais)
 
 Esta skill é autossuficiente e **deve funcionar mesmo que nenhuma das skills
-abaixo esteja instalada**. Se, no ambiente atual, skills de copywriting
-(ex.: direct-response, landing-page-copy, copy-editing) ou de design de
-frontend estiverem disponíveis, você pode invocá-las para enriquecer,
-respectivamente, as sugestões de texto alternativo (Seção 2/10 do relatório)
-ou a direção visual do redesign (Seção 10) — mas a auditoria, a rubrica e o
-relatório desta skill não dependem delas. Nunca bloqueie a entrega por falta
-de uma skill opcional; apenas mencione, se relevante, que a sugestão poderia
-ser refinada com ela.
+abaixo esteja instalada**. A avaliação completa de licenças, compatibilidade
+e a tabela de quando usar cada uma está em
+`references/INTEGRATIONS.md` — leia-a antes de invocar qualquer skill
+externa. Resumo:
+
+| Skill externa | Repositório | Licença | Onde pode ajudar |
+|---|---|---|---|
+| `direct-response-copy`, `landing-page-copy`, `copychief`, `compliance-checker` | robpalmer99/claude-code-copywriting-skills | CC-BY-4.0 (exige atribuição) | Seção 10 do relatório (sugestões de copy prontas) e revisão linha a linha |
+| `copywriting`, `copy-editing`, `cro`, `offers`, `pricing`, `marketing-psychology` | coreyhaines31/marketingskills | MIT | Enriquecimento opcional do diagnóstico de oferta/CRO (critério 4 da rubrica) |
+| `frontend-design` | anthropics/skills | Apache-2.0 | Direção visual/tipografia da Seção 14 (redesign) |
+
+Antes de escrever a Seção 10 (sugestões de copy) ou a Seção 14 (redesign),
+verifique a lista de skills disponíveis nesta sessão. Se uma das skills
+acima estiver disponível, pode invocá-la para a primeira versão daquele
+trecho e depois revisar o resultado contra os "Padrões de qualidade do
+diagnóstico" abaixo. Se nenhuma estiver disponível — o caso comum — escreva
+você mesmo, aplicando `references/FRAMEWORKS.md` diretamente; não é um erro
+nem uma limitação a reportar, é o funcionamento padrão desta skill.
+
+**Nunca delegue a captura de evidências nem o cálculo da nota da rubrica**
+a uma skill externa — essas duas etapas são sempre feitas por
+`scripts/capture.mjs` e `scripts/rubric.mjs` desta skill, para que o
+resultado seja reprodutível independentemente de quais skills opcionais
+estejam instaladas. Se usar uma sugestão de copy vinda de
+`claude-code-copywriting-skills` (CC-BY-4.0), inclua a nota de atribuição
+descrita em `references/INTEGRATIONS.md`.
 
 ## Padrões de qualidade do diagnóstico
 
