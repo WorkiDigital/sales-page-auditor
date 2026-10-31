@@ -13,7 +13,7 @@ const required = [
   '.claude/skills/sales-page-auditor/references/REPORT_TEMPLATE.md',
   'scripts/capture.mjs', 'scripts/report.mjs', 'scripts/verify.mjs',
   'scripts/lib/security.mjs', 'scripts/lib/score.mjs',
-  'tests/security.test.mjs', 'tests/score.test.mjs', 'tests/report.test.mjs',
+  'tests/security.test.mjs', 'tests/score.test.mjs', 'tests/report.test.mjs', 'tests/capture.test.mjs',
   'examples/sample-audit.json'
 ];
 let errors = [];
@@ -36,7 +36,7 @@ for (const item of required.filter(f => f.endsWith('.mjs'))) {
   const result = spawnSync(process.execPath, ['--check', path.join(root, item)], { encoding: 'utf8' });
   if (result.status !== 0) errors.push('Sintaxe: ' + item + '\n' + result.stderr);
 }
-const tests = spawnSync(process.execPath, ['--test', 'tests/security.test.mjs','tests/score.test.mjs','tests/report.test.mjs'], { cwd: root, stdio: 'inherit' });
+const tests = spawnSync(process.execPath, ['--test', 'tests/security.test.mjs','tests/score.test.mjs','tests/report.test.mjs','tests/capture.test.mjs'], { cwd: root, stdio: 'inherit' });
 if (tests.status !== 0) errors.push('Testes unitários falharam');
 if (errors.length) {
   console.error('FALHA DE VERIFICAÇÃO:\n- ' + errors.join('\n- '));
