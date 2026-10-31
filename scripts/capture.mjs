@@ -127,7 +127,7 @@ async function runDevice(browser, initialUrl, name, viewport, out, evidence, tim
     }
   });
   page.on('request', req => {
-    if (req.isNavigationRequest() && req.isMainFrame()) {
+    if (req.isNavigationRequest() && req.frame() === page.mainFrame()) {
       if (!redirects.includes(req.url())) redirects.push(req.url());
     }
   });
