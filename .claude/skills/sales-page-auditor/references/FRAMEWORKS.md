@@ -1,54 +1,97 @@
-# Frameworks para o diagnóstico de páginas
+# Metodologias estratégicas — perguntas-guia
 
-Este documento apresenta checklists autorais de aplicação. Os autores citados são referências conceituais; não há alegação de skill oficial, endosso ou citação literal.
+Este arquivo traduz cada metodologia em perguntas de diagnóstico concretas,
+para aplicar sobre a evidência real capturada (texto extraído + screenshots).
+São lentes conceituais de domínio público sobre copywriting e marketing de
+resposta direta — não são skills oficiais instaladas, não citam os autores
+como fonte da página analisada, e não substituem a leitura da evidência.
 
-## Contexto e evidência antes de opinião
+Ao usar este arquivo, sempre volte à pergunta: "isso está comprovadamente na
+página, ou estou presumindo?". Se estiver presumindo, classifique como
+**Hipótese** no relatório, nunca como **Observado**.
 
-Preencha: oferta observada; público explícito ou inferido (sinalize); etapa do funil e origem de tráfego (se conhecida); ação principal; preço, bônus, garantias e dados apenas se exibidos. Capture título, promessa, primeiros CTAs, seções, prova, objeções e screenshots. Não presuma que o design que parece bonito vende mais.
+---
 
-## Eugene Schwartz: consciência e sofisticação
+## Eugene Schwartz — consciência e sofisticação de mercado
 
-Pergunte: visitante reconhece problema, soluções, produto e oferta? A abertura usa vocabulário compatível? A promessa parte de desejo já existente ou exige crença nova? O mercado já viu alegações similares? Há especificidade que sustenta a diferença? Se não conhecer a audiência, classifique a conclusão como hipótese, não observação.
+- **Nível de consciência do público**: a página assume que o visitante já
+  conhece o problema? Já conhece soluções? Já conhece esta oferta específica?
+  A copy casa com esse nível, ou tenta vender "solução" para quem ainda não
+  sabe que tem o "problema" (ou vice-versa, reexplica o óbvio para quem já
+  decidiu comprar)?
+- **Sofisticação do mercado**: o nicho já viu muitas promessas parecidas? A
+  página se diferencia de ofertas concorrentes óbvias, ou repete a mesma
+  promessa genérica do mercado?
+- **Intensidade do desejo**: a copy amplifica um desejo já presente no
+  público, ou tenta criar desejo do zero? Isso é coerente com o produto?
+- **Coerência promessa-audiência**: a promessa central combina com quem a
+  página parece endereçar (linguagem, exemplos, nível de preço sugerido)?
 
-## Gary Halbert: sequência da resposta direta
+## Gary Halbert — mecânica da persuasão escrita
 
-Teste headline em clareza, relevância, especificidade e curiosidade justificada; compare com a primeira frase e promessa. Mapeie tensão narrativa, demonstração, argumentos, objeções e chamada final. Marque rupturas de fluxo. Reescreva passagens fracas preservando os fatos.
+- **Força da headline**: a primeira headline visível (H1 na primeira dobra)
+  faz uma promessa específica e relevante, ou é vaga/genérica? Ela pararia a
+  rolagem de alguém do público-alvo?
+- **Abertura da copy**: o primeiro parágrafo/bloco após a headline conquista
+  atenção (problema nomeado, curiosidade, identificação) ou desperdiça a
+  abertura com institucional/sobre-nós?
+- **Curiosidade**: existem "loops abertos" (perguntas, promessas parciais) que
+  sustentam a leitura até a oferta?
+- **Encadeamento persuasivo**: os blocos seguem uma ordem lógica (problema →
+  agitação → solução → prova → oferta → ação), ou saltam sem transição?
+- **Argumentos e fechamento**: os argumentos antes da oferta sustentam o preço
+  pedido? O fechamento tem urgência genuína (não fabricada) e uma CTA clara?
 
-## Alex Hormozi: equação de valor como lente heurística
+## Alex Hormozi — equação de valor da oferta
 
-Resultado desejado e confiança no resultado precisam ser compreensíveis, assim como o tempo e o esforço percebidos. Localize os elementos da oferta que alteram esses fatores: demonstração, escopo, modo de entrega, bônus e política de risco, se real. Não invente garantias, prazos, taxas de sucesso ou resultados.
+- **Valor percebido vs. preço**: a página comunica resultado dos sonhos +
+  probabilidade percebida de sucesso, pesados contra tempo e esforço
+  percebidos? Ou apenas lista features?
+- **Clareza da oferta**: é possível, em poucos segundos, dizer o que se compra,
+  por quanto, e o que se recebe?
+- **Bônus e garantias**: SE existirem na página, eles reduzem risco/aumentam
+  valor percebido de forma concreta? Nunca presuma bônus/garantia que não
+  esteja explicitamente na captura.
+- **Esforço e tempo percebidos**: a copy reduz a fricção percebida (facilidade,
+  rapidez, suporte) ou aumenta a sensação de trabalho/complexidade?
+- **Diferenciação da oferta**: há um motivo claro para comprar esta oferta e
+  não a de um concorrente (mecanismo único, garantia, formato)?
 
-## Russell Brunson: Hook–Story–Offer
+## Russell Brunson — Hook, Story, Offer
 
-Identifique gancho inicial, história/mecanismo e oferta. Avalie se cada etapa prepara a seguinte, se a história reduz objeções, e se o CTA chega quando o valor está inteligível. A sequência não é obrigatória para toda página: contextualize conforme produto e público.
+- **Hook**: o que captura atenção na primeira dobra — e ele é coerente com o
+  que a oferta de fato entrega (sem bait-and-switch)?
+- **Story**: existe uma narrativa (do criador, de um caso, de uma transformação)
+  que conecta o problema à solução, ou a página vai direto para argumentos
+  racionais sem contexto?
+- **Mecanismo único**: a solução tem um "nome"/framework próprio que a torna
+  memorável e diferenciada, ou é genérica ("nosso método comprovado")?
+- **Sequência até o fechamento**: hook → story → oferta → prova → CTA aparece
+  em alguma ordem reconhecível, ou a página mistura tudo sem progressão?
 
-## Donald Miller: clareza narrativa
+## Donald Miller — StoryBrand
 
-O comprador é protagonista? Seu problema é concreto? O produto atua como guia? Existe plano inteligível? O CTA deixa claro o próximo passo e o que acontece depois? Evite narrativas que coloquem a marca no lugar da transformação do cliente.
+- **Clareza do problema**: o problema do visitante é nomeado explicitamente
+  (externo, interno e, se aplicável, filosófico), ou fica implícito?
+- **Cliente como protagonista**: a copy fala sobre o cliente e sua
+  transformação, ou gasta a maior parte do espaço falando da empresa/produto?
+- **Guia e plano**: existe um "guia" (a marca/autor) com um plano claro e
+  simples (passos) até a solução, ou o caminho parece confuso/longo?
+- **CTA inequívoca**: existe uma única ação primária óbvia, repetida de forma
+  consistente, sem competir com várias CTAs de pesos parecidos?
 
-## CRO — referência Corey Haines
+---
 
-Cheque alinhamento entre anúncio e landing (somente com anúncio disponível), mensagem principal da primeira dobra, uma ação principal, fricção de formulários, microcopy, prova no ponto da dúvida, velocidade percebida, continuidade e desenho de testes. Separe verificação observável de hipótese experimental.
+## Como aplicar sem inventar
 
-## Copychief / landing page — referência Rob Palmer
-
-Faça revisão linha a linha: frase genérica, afirmação vaga, salto lógico, objeção não respondida, benefício sem mecanismo ou prova. Proponha cópia pronta em pares original/alternativa, sempre justificando o ganho em compreensão. Avaliação de conformidade só se plataforma e políticas forem conhecidas; não declare 'aprovado' por Meta/Google.
-
-## Design intencional — referência Anthropic
-
-Avalie hero adequado ao produto, identidade e hierarquia, escala tipográfica, paleta funcional, linhas de texto, contraste, espaçamento, posicionamento de prova/CTA, consistência responsiva e foco no teclado. Compare 1440x900 e 390x844 separadamente. Rejeite 'design bonito' como evidência de aumento de conversão. Para propostas, declare tokens de cor/tipografia/layout e critique o wireframe antes do HTML.
-
-## Matriz de evidências e decisões
-
-- Observado: texto literal no DOM ou elemento visível em screenshot inspecionado; cite origem e posição.
-- Hipótese: conclusão de CRO/psicologia sem dado causal; explique suposição e método de teste.
-- Não verificado: contexto ausente, screenshot ausente, bloqueio ou dado não público.
-- Prioridade: indique impacto potencial (alto/médio/baixo), confiança (alta/média/baixa), esforço (alto/médio/baixo). Se uma hipótese depender de analytics, peça baseline antes de concluir.
-
-## Referências e licenças
-
-- Corey Haines, Marketing Skills — https://github.com/coreyhaines31/marketingskills — MIT.
-- Rob Palmer, Claude Code Copywriting Skills — https://github.com/robpalmer99/claude-code-copywriting-skills — CC BY 4.0; atribuição ao autor e projeto.
-- Anthropic, Frontend Design — https://github.com/anthropics/skills/tree/main/skills/frontend-design — termos da pasta original, conteúdo não redistribuído.
-
-A implementação não contém cópias ou instalações automáticas desses três repositórios; os critérios foram sintetizados e documentados nesta skill para funcionar de modo independente.
+1. Para cada pergunta acima, procure a evidência em `evidence.json` (headings,
+   ctaCandidates, blockOrder, bodyTextSample) e nas screenshots.
+2. Se a evidência responde claramente → registre como **Observado**, cite o
+   trecho/elemento.
+3. Se a evidência é parcial/ambígua → registre como **Hipótese**, explique o
+   raciocínio e o que confirmaria.
+4. Se a página não permite responder (ex.: captura falhou, elemento não
+   encontrado) → registre como **Não verificado**.
+5. Nunca combine duas ou mais lentes numa alegação sem necessidade — mantenha
+   cada apontamento rastreável a uma pergunta-guia específica, para que a
+   justificativa no relatório seja verificável.

@@ -1,85 +1,157 @@
-# Sales Page Auditor V1.0
+# Sales Page Auditor
 
-Auditoria profissional de páginas de vendas pelo Claude Code, com **copywriting + CRO + UX/UI** e evidências reais de desktop/mobile. Repositório independente, reproduzível e sem necessidade de site público.
+[![CI](https://github.com/WorkiDigital/sales-page-auditor/actions/workflows/ci.yml/badge.svg)](https://github.com/WorkiDigital/sales-page-auditor/actions/workflows/ci.yml)
 
-## O que faz
+Ferramenta profissional para o Claude Code auditar páginas de vendas
+(landing pages), combinando:
 
-1. Recebe uma URL HTTP/HTTPS pública.
-2. Usa Playwright + Chromium em 1440×900 (desktop) e 390×844 (mobile).
-3. Registra screenshots completos, textos, headings, links, CTAs, botões, imagens, formulários (apenas estrutura, sem valores) e sequência aproximada de seções.
-4. O agente **inspeciona visualmente os PNGs e a copy** e avalia promessa, objeções, oferta, provas, hierarquia, legibilidade, fricção e experiência mobile.
-5. Organiza um relatório Markdown e notas numa rubrica de **100 pontos**, com cobertura declarada e N/A para partes não verificáveis.
-6. Opcionalmente propõe nova copy, wireframe e HTML responsivo (sem publicar).
+- Copywriting de resposta direta (Halbert, Schwartz)
+- CRO e psicologia de conversão (Hormozi, Brunson, Miller)
+- UX/UI e hierarquia visual
+- Captura real de evidências em navegador (Playwright): desktop e mobile
+- Pontuação padronizada de 100 pontos
+- Relatório executivo em Markdown, com recomendações concretas e,
+  opcionalmente, uma proposta de redesign
 
-**Importante:** Playwright coleta dados, mas não julga qualidade persuasiva automaticamente. A avaliação é feita pelo Claude a partir das evidências. Nenhuma nota é previsão de taxa de conversão.
+Não é um site, não faz deploy, não publica nada. É uma skill + scripts para
+uso dentro do Claude Code (Cloud ou local).
 
-## Instalação — Claude Code local
+## Estrutura
 
-É necessário Node.js 20+, npm e ambiente que permita instalar Chromium.
+```
+sales-page-auditor/
+├── .claude/skills/sales-page-auditor/
+│   ├── SKILL.md                 # ponto de entrada da skill
+│   └── references/
+│       ├── FRAMEWORKS.md        # metodologias (Schwartz, Halbert, Hormozi, Brunson, Miller)
+│       ├── RUBRIC.md            # rubrica de 100 pontos documentada
+│       ├── REPORT_TEMPLATE.md   # template do relatório executivo
+│       └── INTEGRATIONS.md      # avaliação de licenças + integração opcional com skills externas
+├── scripts/
+│   ├── capture.mjs              # captura real (Playwright): screenshots + extração
+│   ├── rubric.mjs               # pesos da rubrica + cálculo de nota (fonte de verdade)
+│   └── verify.mjs               # suite de validação (estrutura, rubrica, segurança de URL)
+├── tests/                       # fixtures auxiliares de teste
+├── examples/                    # evidência fictícia de exemplo (nunca dados reais de clientes)
+├── output/                      # gerado em runtime, ignorado pelo Git
+├── CLAUDE.md                    # regras globais do projeto
+└── package.json
+```
 
-~~~bash
-git clone https://github.com/WorkiDigital/sales-page-auditor.git
-cd sales-page-auditor
-npm ci
-npx playwright install chromium
+## Requisitos
+
+- Node.js **20+** (testado em Node 22).
+- Navegador Chromium do Playwright instalado no ambiente atual (ver abaixo —
+  **não é persistido** entre sessões temporárias de nuvem).
+- Nenhuma conta, API key ou serviço externo é necessário.
+
+## Instalação
+
+```bash
+npm install
+npm run install:browser   # playwright install chromium --with-deps
+```
+
+`npm run install:browser` baixa o binário do Chromium usado pelo Playwright.
+Em redes restritas, isso pode falhar — ver "Limitações" abaixo.
+
+## Validação
+
+```bash
 npm run verify
-claude
-~~~
+```
 
-Se o Chromium requerer bibliotecas do sistema num Linux próprio, consultar o [guia Playwright](https://playwright.dev/docs/browsers) e executar, quando autorizado:
+O GitHub Actions (`.github/workflows/ci.yml`) roda `npm ci` + instalação do
+Chromium + `npm run verify` em Node 20.x e 22.x a cada push/PR, para que a
+suite completa (incluindo captura real) seja validada automaticamente.
 
-~~~bash
-npx playwright install --with-deps chromium
-~~~
+Executa `scripts/verify.mjs`: checa a estrutura de arquivos obrigatórios, o
+frontmatter do `SKILL.md`, a consistência da rubrica (`scripts/rubric.mjs`
+vs. `references/RUBRIC.md`), a lógica de cálculo de nota (incluindo
+cobertura parcial com critérios N/A), e as validações de segurança de URL do
+capturador (bloqueio de IPs privados, esquemas inválidos, credenciais
+embutidas). Se um navegador Chromium estiver instalado, também executa uma
+captura real contra `https://example.com` e confirma que uma URL de rede
+interna (`http://127.0.0.1:9999/`) é recusada sem gerar nenhum arquivo.
 
-No Claude Code aberto **dentro da pasta do repositório**, inicie:
+## Uso dentro do Claude Code
 
-~~~text
+Com o repositório aberto (local) ou clonado/anexado (Cloud), a skill
+`sales-page-auditor` fica disponível automaticamente via
+`.claude/skills/sales-page-auditor/SKILL.md`. Invoque:
+
+```
 /sales-page-auditor https://exemplo.com
 /sales-page-auditor https://exemplo.com foco em copy
 /sales-page-auditor https://exemplo.com foco visual mobile
 /sales-page-auditor https://exemplo.com reestruture a página
-~~~
+```
 
-A descoberta depende de .claude/skills/sales-page-auditor/SKILL.md no projeto atual. Se não aparecer, abra uma nova sessão na raiz, confirme que a pasta .claude/ está presente e procure /sales-page-auditor na lista de skills. Não é necessário arquivo global.
+O Claude Code então:
+1. Executa `node scripts/capture.mjs "<url>" --out output/<slug>` para obter
+   `desktop.png`, `mobile.png`, `evidence.json`, `summary.md`.
+2. Lê a evidência e as duas screenshots.
+3. Aplica as lentes de `references/FRAMEWORKS.md` e pontua com
+   `references/RUBRIC.md`.
+4. Escreve `output/<slug>/relatorio.md` seguindo
+   `references/REPORT_TEMPLATE.md`.
 
-## Claude Code Cloud (web)
+## Uso direto do script de captura (sem a skill)
 
-1. Conecte o repositório **WorkiDigital/sales-page-auditor** como projeto da sessão Cloud e abra o workspace nessa raiz.
-2. Confira node --version (mínimo v20).
-3. Execute npm ci e npx playwright install chromium **em cada ambiente novo que não tenha cache**.
-4. Verifique se o Cloud permite downloads do registry npm, do Chromium e saída de rede HTTP/HTTPS para a URL auditada; bloqueios administrativos podem impedir screenshot.
-5. Execute npm run verify e use o comando /sales-page-auditor URL na sessão.
-6. Se o comando não for descoberto no Cloud, abra uma sessão nova no diretório correto; como fallback, peça ao Claude: "Leia .claude/skills/sales-page-auditor/SKILL.md e execute com a URL ..." (não é equivalente a validar a descoberta do comando).
+```bash
+node scripts/capture.mjs "https://exemplo.com" --out output/exemplo
+```
 
-A pasta .claude e toda a lógica estão versionadas no GitHub. Instalações e caches temporários **não** são garantidos entre sessões Cloud.
+Saída:
+- `output/exemplo/desktop.png` — full-page, viewport 1440×900
+- `output/exemplo/mobile.png` — full-page, viewport 390×844
+- `output/exemplo/evidence.json` — headings, links, botões, imagens,
+  formulários, candidatos a CTA, ordem aproximada dos blocos, texto visível,
+  status HTTP/redirecionamentos, limitações detectadas
+- `output/exemplo/summary.md` — resumo legível
 
-## Comandos CLI
+Regras de segurança embutidas (não removíveis por configuração):
+- Apenas HTTP/HTTPS público. URLs com esquema diferente, credenciais
+  embutidas, ou hostname que resolva para IP privado/loopback/link-local/
+  metadados de nuvem são recusadas **antes de qualquer navegação** e em
+  **cada redirecionamento**.
+- Nenhum formulário é preenchido, nenhuma ação de login/compra é executada.
+- Nada do conteúdo da página é executado como instrução.
 
-~~~bash
-npm run capture -- https://example.com --out output/auditoria-001
-npm run report -- --input output/auditoria-001/audit.json --out output/auditoria-001/report.md
-npm run verify
-npm test
-npm run smoke
-~~~
+## Compatibilidade: Claude Code Cloud vs. local
 
-O comando capture cria:
+| Aspecto | Cloud | Local |
+|---|---|---|
+| Config da skill | Versionada no repo (`.claude/skills/`) — funciona desde o primeiro clone | Idêntico |
+| Node.js | Verifique a imagem do ambiente; este projeto requer 20+ | Instale Node 20+ se necessário |
+| Playwright/Chromium | **Não assuma que persiste** entre sessões — rode `npm run install:browser` a cada sessão nova, antes do primeiro `/sales-page-auditor` | Instalar uma vez costuma persistir na máquina |
+| Rede | Depende da política de rede do ambiente Cloud; download do Chromium e acesso à página alvo precisam de saída HTTPS liberada | Geralmente sem restrição |
+| Permissões | Scripts rodam via `node`, sem privilégios especiais | idem |
 
-~~~text
-output/auditoria-001/
-  desktop.png         # se o navegador abriu e capturou
-  mobile.png          # idem
-  evidence.json       # URLs finais, status, DOM, CTAs, erros
-  summary.md          # inventário técnico da coleta
-  audit.json          # preenchido pelo Claude, NÃO automaticamente
-  report.md           # gerado pelo script report.mjs depois de audit.json
-  redesign.html       # opcional, quando solicitado
-~~~
+Se o Chromium não puder ser instalado no ambiente atual (sem rede para
+baixar o binário, por exemplo), a skill não trava: ela produz uma auditoria
+parcial baseada no que conseguir obter (ex.: texto via outra ferramenta de
+fetch, se disponível), marca os critérios visuais (6 e 7 da rubrica) como
+N/A, e informa isso claramente no relatório — nunca inventa screenshots.
 
-A pasta output/ é ignorada por Git, inclusive capturas e auditorias de clientes. Não transfira essas evidências para commits ou issues públicos. A primeira execução pode criar a pasta automaticamente.
+## Metodologias incorporadas
 
-## Critérios (100 pontos)
+Ver `references/FRAMEWORKS.md` para o detalhamento. Em resumo, a auditoria
+aplica, como lentes de análise (conceituais, de domínio público — não
+citações atribuídas à página analisada):
+
+- **Eugene Schwartz** — nível de consciência, sofisticação de mercado,
+  intensidade do desejo.
+- **Gary Halbert** — força da headline, abertura, curiosidade, encadeamento
+  persuasivo.
+- **Alex Hormozi** — equação de valor, clareza da oferta, bônus/garantias
+  (quando existentes), diferenciação.
+- **Russell Brunson** — Hook–Story–Offer, mecanismo único, sequência até o
+  fechamento.
+- **Donald Miller (StoryBrand)** — clareza do problema, cliente como
+  protagonista, plano do guia, CTA inequívoca.
+
+## Rubrica (100 pontos, pesos fixos)
 
 | Critério | Peso |
 |---|---:|
@@ -91,36 +163,42 @@ A pasta output/ é ignorada por Git, inclusive capturas e auditorias de clientes
 | Estrutura visual desktop | 10 |
 | Experiência mobile | 10 |
 | CTAs e fricção | 10 |
-| **Total** | **100** |
 
-Cada nota exige evidência. Se um aspecto não puder ser verificado, marca-se **N/A**. Nota publicada = 100 × (pontos obtidos / pesos verificáveis); cobertura = porcentagem dos pesos verificados. Sem evidências: nota N/A e cobertura 0%. **Uma nota com 25% de cobertura não representa uma auditoria completa.**
+Critérios não verificáveis são marcados N/A e a nota é recalculada
+proporcionalmente (ver `scripts/rubric.mjs` e `references/RUBRIC.md`). A
+nota **nunca** representa previsão de taxa de conversão.
 
-Documentação: [rubrica](.claude/skills/sales-page-auditor/references/RUBRIC.md), [frameworks](.claude/skills/sales-page-auditor/references/FRAMEWORKS.md), [contrato do relatório](.claude/skills/sales-page-auditor/references/REPORT_TEMPLATE.md).
+## Skills complementares (opcionais, não obrigatórias)
 
-## Segurança e limites
+Esta skill funciona de forma independente. Em ambientes onde também existam
+skills de copywriting de resposta direta/landing page (robpalmer99,
+CC-BY-4.0) ou de design de frontend (anthropics/skills, Apache-2.0), elas
+podem ser usadas para enriquecer sugestões de texto ou a direção visual de
+um redesign — mas nunca são pré-requisito, e nenhum conteúdo delas foi
+copiado para este repositório. Avaliação completa de licença e
+compatibilidade em
+`.claude/skills/sales-page-auditor/references/INTEGRATIONS.md`; pontos de
+uso em `SKILL.md`, seção "Skills complementares".
 
-- URL, DNS e cada requisição interceptada são checados para bloquear HTTP não público, localhost, redes privadas, endereços especiais, portas não padrão e redirecionamentos internos. Em sistemas com requisitos SSRF rígidos, a filtragem de aplicação **não substitui firewall de saída e isolamento de rede**: DNS rebinding / TOCTOU é possível porque o endereço DNS validado não é fixado na conexão do Chromium.
-- Nunca faça login, clique em ofertas, preencha formulários, registre dados de compradores ou realize compras. Requisições de recursos da própria página podem existir durante renderização.
-- Páginas dinâmicas, geobloqueio, antibot, autenticação, banners de consentimento, scroll lazy-load e falhas de rede podem tornar a captura parcial. Screenshot estático não comprova usabilidade em todas as interações.
-- Em caso de bloqueio, evidence.json e summary.md preservam o motivo, e categorias não comprovadas ficam N/A.
-- Inspeção visual requer efetivamente ler os arquivos PNG. DOM/HTML isolados não comprovam aparência.
-- O relatório só aceita classificações Observado, Hipótese e Não verificado. Não inventar resultados, depoimentos, garantias, escassez ou taxas de conversão.
-- Nenhuma modificação automática do site. **Sem deploy para Vercel.**
+## Limitações conhecidas
 
-## Testes
+- Sem navegador instalado: sem screenshots reais → critérios visuais ficam
+  N/A e a análise visual não pode ser feita (HTML/DOM isolado não é
+  evidência suficiente de aparência — por design desta ferramenta).
+- Páginas com login, paywall ou proteção anti-bot/CAPTCHA: a captura detecta
+  indícios comuns e sinaliza `antiBotSuspected`/`limitations` em
+  `evidence.json`, mas não tenta contornar a proteção.
+- Páginas extremamente dinâmicas (vídeo em loop, carrosséis com JS pesado)
+  podem exigir mais tempo de `networkidle`; ajuste `--timeout` se necessário.
+- A extração de "ordem dos blocos" é uma aproximação por elementos
+  semânticos/posição vertical — páginas sem marcação semântica (`<section>`,
+  `<header>`, etc.) podem gerar uma ordem menos precisa.
 
-~~~bash
-npm run verify
-npm test
-npm run smoke
-~~~
+## Comandos úteis
 
-- Verifica estrutura, frontmatter, sintaxe JavaScript, pontuação, relatório e validações de URL.
-- O smoke exige Chromium instalado e **acesso público à rede**, utilizando https://example.com; não deve ser considerado aprovado quando não foi executado.
-- O GitHub Actions CI usa Node 20, npm ci, testes e captura smoke. Verifique o resultado no Actions antes de considerar a captura validada naquele ambiente.
-
-## Créditos
-
-Os métodos de Corey Haines (MIT), Rob Palmer (CC BY 4.0) e diretrizes de design da Anthropic foram **referenciados e sintetizados**, sem redistribuir ou executar código externo. Veja [THIRD_PARTY.md](THIRD_PARTY.md).
-
-Playwright (Apache 2.0) é a única dependência de execução instalada via npm.
+```bash
+npm install                 # instala playwright (dependência npm)
+npm run install:browser     # instala o binário do Chromium
+npm run capture -- "<url>"  # captura evidências (atalho para scripts/capture.mjs)
+npm run verify              # roda a suite de validação completa
+```

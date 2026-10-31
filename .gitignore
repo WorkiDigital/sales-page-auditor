@@ -1,10 +1,15 @@
 node_modules/
-output/
+output/*
 !output/.gitkeep
-playwright-report/
-test-results/
+npm-debug.log*
+
+*.log
+.DS_Store
 .env
 .env.*
 !.env.example
-*.log
-.DS_Store
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/

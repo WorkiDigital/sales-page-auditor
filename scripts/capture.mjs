@@ -1,197 +1,568 @@
 #!/usr/bin/env node
-import path from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { validatePublicUrl } from './lib/security.mjs';
+/**
+ * capture.mjs — Real-browser evidence collector for the Sales Page Auditor skill.
+ *
+ * Usage:
+ *   node scripts/capture.mjs <url> [--out <dir>] [--timeout <ms>]
+ *
+ * Produces, inside the output directory (default: output/<slug>/):
+ *   desktop.png   full-page screenshot at a 1440x900 viewport
+ *   mobile.png    full-page screenshot at a 390x844 viewport
+ *   evidence.json structured extraction (headings, links, buttons, images, forms, CTAs, block order)
+ *   summary.md    human-readable capture summary with limitations
+ *
+ * Safety rules (do not relax these):
+ *   - Only http/https (and, for subresources, ws/wss) network schemes are
+ *     accepted; everything else (file:, ftp:, etc.) is refused outright.
+ *   - Any hostname that resolves to a private, loopback, link-local, multicast,
+ *     reserved, shared/CGNAT, benchmarking, documentation, or cloud-metadata
+ *     address is refused — before the top-level navigation, on every redirect
+ *     hop, AND on every subresource request the page makes (images, scripts,
+ *     stylesheets, fonts, fetch/XHR, WebSocket). A page cannot use an <img>,
+ *     background-image, or fetch() call to reach an internal address even
+ *     when the page itself is public.
+ *   - No form is submitted, no credential is entered, no purchase flow is touched.
+ *   - Page content is only read (DOM, text, screenshots). It is never executed
+ *     as instructions and never fed back into the browser as script/action input.
+ *   - Known residual risk: DNS rebinding (hostname resolves public at check
+ *     time, then an attacker-controlled DNS answer changes it before the
+ *     browser's own connection) cannot be fully closed without a forward
+ *     proxy that pins the validated IP for the actual socket — this tool
+ *     does application-level re-validation per request instead, which closes
+ *     the window but does not eliminate it. See README.md.
+ */
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const OUTPUT = path.join(ROOT, 'output');
-const LIMIT = 60000;
-const cut = (value, n = 500) => String(value || '').trim().slice(0, n);
-export function resolveOutputDir(userValue, input) {
-  const hostname = (() => { try { return new URL(input).hostname.replace(/[^a-z0-9.-]/gi, '-'); } catch { return 'invalid-url'; } })();
-  const folder = userValue || path.join('output', hostname + '-' + new Date().toISOString().replace(/[:.]/g, '-'));
-  const destination = path.resolve(ROOT, folder);
-  const relative = path.relative(OUTPUT, destination);
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('Saída deve ser uma subpasta de output/');
+import { chromium } from 'playwright';
+import { promises as dns } from 'node:dns';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import net from 'node:net';
+
+const DESKTOP_VIEWPORT = { width: 1440, height: 900 };
+const MOBILE_VIEWPORT = { width: 390, height: 844 };
+const DEFAULT_TIMEOUT_MS = 45_000;
+const USER_AGENT_DESKTOP =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 SalesPageAuditor/1.0';
+const USER_AGENT_MOBILE =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1 SalesPageAuditor/1.0';
+
+class UnsafeUrlError extends Error {}
+
+function parseArgs(argv) {
+  const args = { url: null, out: null, timeout: DEFAULT_TIMEOUT_MS };
+  const rest = [...argv];
+  args.url = rest.shift() ?? null;
+  while (rest.length) {
+    const flag = rest.shift();
+    if (flag === '--out') args.out = rest.shift();
+    else if (flag === '--timeout') args.timeout = Number(rest.shift()) || DEFAULT_TIMEOUT_MS;
+    else throw new Error(`Unknown argument: ${flag}`);
   }
-  return destination;
-}
-function parse(argv) {
-  const url = argv[0];
-  const opts = {};
-  for (let i = 1; i < argv.length; i++) {
-    if (argv[i] === '--out' && argv[i + 1]) opts.out = argv[++i];
-    else if (argv[i] === '--timeout' && argv[i + 1]) {
-      opts.timeout = Number(argv[++i]);
-      if (!Number.isFinite(opts.timeout) || opts.timeout < 1000 || opts.timeout > 60000) throw new Error('Timeout fora do intervalo 1000-60000ms');
-    } else throw new Error('Argumento não reconhecido: ' + argv[i]);
+  if (!args.url) {
+    throw new Error('Usage: node scripts/capture.mjs <url> [--out <dir>] [--timeout <ms>]');
   }
-  if (!url) throw new Error('Uso: npm run capture -- https://site.com [--out output/nome]');
-  return { url, ...opts };
+  return args;
 }
-function summary(e) {
-  const lines = [
-    '# Resumo da captura',
-    '', '- Solicitada: ' + (e.requestedUrl || 'N/A'),
-    '- Final: ' + (e.finalUrl || 'Não verificada'),
-    '- Data: ' + e.timestamp,
-    '- Resultado: ' + e.status,
-    '- Redirecionamentos: ' + (e.redirects.length ? e.redirects.join(' -> ') : 'Nenhum registrado'),
-    '', '## Evidências',
-    ''
-  ];
-  for (const [device, v] of Object.entries(e.devices)) {
-    lines.push('- ' + device + ': ' + (v.screenshot || 'Não disponível') +
-      ' | título: ' + (v.title || 'N/A') +
-      ' | headings: ' + (v.headings?.length || 0) + ' | CTAs: ' + (v.ctas?.length || 0));
+
+function slugify(inputUrl) {
+  return inputUrl
+    .replace(/^https?:\/\//, '')
+    .replace(/[^a-zA-Z0-9.-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'capture';
+}
+
+/** IPv4 ranges that must never be navigated to. */
+function isPrivateIPv4(ip) {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return true; // malformed → block
+  const [a, b] = parts;
+  if (a === 0) return true; // 0.0.0.0/8
+  if (a === 10) return true; // 10.0.0.0/8
+  if (a === 127) return true; // loopback
+  if (a === 169 && b === 254) return true; // link-local / cloud metadata (169.254.169.254)
+  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+  if (a === 192 && b === 168) return true; // 192.168.0.0/16
+  if (a === 192 && b === 0 && parts[2] === 2) return true; // documentation range
+  if (a === 100 && b >= 64 && b <= 127) return true; // shared address space (CGNAT)
+  if (a === 192 && b === 0 && parts[2] === 0) return true; // 192.0.0.0/24 IETF protocol assignments
+  if (a === 198 && (b === 18 || b === 19)) return true; // 198.18.0.0/15 benchmarking
+  if (a === 198 && b === 51 && parts[2] === 100) return true; // TEST-NET-2
+  if (a === 203 && b === 0 && parts[2] === 113) return true; // TEST-NET-3
+  if (a >= 224) return true; // multicast (224-239) + reserved (240-255)
+  return false;
+}
+
+function isPrivateIPv6(ip) {
+  const lower = ip.toLowerCase();
+  if (lower === '::1') return true; // loopback
+  if (lower === '::') return true;
+  if (lower.startsWith('fe80:')) return true; // link-local
+  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique local fc00::/7
+  if (lower.startsWith('::ffff:')) {
+    // IPv4-mapped IPv6 — check the embedded IPv4
+    const mapped = lower.split(':').pop();
+    if (mapped && mapped.includes('.')) return isPrivateIPv4(mapped);
   }
-  lines.push('', '## Limitações / erros', '');
-  lines.push(...(e.errors.length ? e.errors.map(x => '- ' + x) : ['- Nenhum erro detectado; conferir visualmente os screenshots.']));
-  lines.push('', 'Este resumo não é uma auditoria nem uma previsão de conversão.');
-  return lines.join('\n') + '\n';
+  return false;
 }
-async function save(out, evidence) {
-  await mkdir(out, { recursive: true });
-  await writeFile(path.join(out, 'evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
-  await writeFile(path.join(out, 'summary.md'), summary(evidence));
+
+function isPrivateIp(ip) {
+  if (net.isIPv4(ip)) return isPrivateIPv4(ip);
+  if (net.isIPv6(ip)) return isPrivateIPv6(ip);
+  return true; // unrecognized → block
 }
-async function inspect(page) {
-  return page.evaluate(limit => {
-    const text = el => (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim();
-    const visible = el => {
-      const b = el.getBoundingClientRect();
-      const style = getComputedStyle(el);
-      return b.width > 0 && b.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
-    };
-    const box = el => {
-      const r = el.getBoundingClientRect();
-      return { x: Math.round(r.x), y: Math.round(r.y + scrollY), width: Math.round(r.width), height: Math.round(r.height) };
-    };
-    const nodes = (selector, max = 100) => [...document.querySelectorAll(selector)].slice(0, max);
-    const headings = nodes('h1,h2,h3,h4', 120).filter(visible).map(el => ({
-      tag: el.tagName.toLowerCase(), text: text(el).slice(0, 400), bounds: box(el)
-    }));
-    const links = nodes('a[href]', 250).filter(visible).map(el => ({
-      text: text(el).slice(0, 240), href: el.href, bounds: box(el)
-    }));
-    const buttons = nodes('button,input[type="submit"],[role="button"]', 150).filter(visible).map(el => ({
-      text: text(el) || el.value || el.getAttribute('aria-label') || '',
-      type: el.getAttribute('type') || 'button', bounds: box(el)
-    }));
-    const cta = /compr|quero|começar|inscrev|reserv|agend|garant|cadast|checkout|saiba mais|falar|whatsapp|acessar|particip/i;
-    const ctas = [...links.map(x => ({ ...x, kind: 'link' })), ...buttons.map(x => ({ ...x, kind: 'button' }))]
-      .filter(x => cta.test(x.text) || /checkout|pay\.|wa\.me|whatsapp/i.test(x.href || '')).slice(0, 100);
-    const images = nodes('img', 120).filter(visible).map(el => ({
-      alt: el.alt || '', src: el.currentSrc || el.src || '', loading: el.loading || '', bounds: box(el)
-    }));
-    const forms = nodes('form', 50).map(el => ({
-      action: el.action, method: el.method, numberOfFields: el.querySelectorAll('input,select,textarea').length,
-      labels: [...el.querySelectorAll('label')].map(x => text(x).slice(0, 100)).slice(0, 15),
-      bounds: box(el)
-    }));
-    const sections = nodes('main,section,article,header,footer,[role="region"]', 130)
-      .filter(visible).map(el => ({ tag: el.tagName.toLowerCase(), id: el.id || null,
-        heading: text(el.querySelector('h1,h2,h3')).slice(0, 150),
-        textPreview: text(el).slice(0, 300), bounds: box(el) }))
-      .sort((a,b) => a.bounds.y - b.bounds.y).slice(0, 100);
+
+const BLOCKED_HOSTNAME_SUFFIXES = [
+  'localhost',
+  '.local',
+  '.internal',
+  '.lan',
+  '.home.arpa',
+  '.test',
+];
+
+async function assertHostIsPublic(hostname) {
+  const lower = hostname.toLowerCase();
+  if (BLOCKED_HOSTNAME_SUFFIXES.some((suffix) => lower === suffix.replace(/^\./, '') || lower.endsWith(suffix))) {
+    throw new UnsafeUrlError(`Refusing to access internal/reserved host: ${hostname}`);
+  }
+  if (net.isIP(lower)) {
+    if (isPrivateIp(lower)) {
+      throw new UnsafeUrlError(`Refusing to access private/reserved IP: ${hostname}`);
+    }
+    return;
+  }
+  let records;
+  try {
+    records = await dns.lookup(hostname, { all: true, verbatim: true });
+  } catch (err) {
+    throw new UnsafeUrlError(`DNS resolution failed for ${hostname}: ${err.message}`);
+  }
+  if (records.length === 0) {
+    throw new UnsafeUrlError(`No DNS records for ${hostname}`);
+  }
+  for (const { address } of records) {
+    if (isPrivateIp(address)) {
+      throw new UnsafeUrlError(
+        `Refusing to access ${hostname}: resolves to private/reserved address ${address}`
+      );
+    }
+  }
+}
+
+async function assertUrlIsSafe(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new UnsafeUrlError(`Not a valid URL: ${rawUrl}`);
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new UnsafeUrlError(`Only http/https URLs are allowed, got: ${parsed.protocol}`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new UnsafeUrlError('URLs with embedded credentials are not allowed.');
+  }
+  await assertHostIsPublic(parsed.hostname);
+  return parsed;
+}
+
+/**
+ * Schemes that never touch the network and are therefore safe regardless of
+ * "hostname" (inline data, blobs created by the page itself from already-
+ * fetched/validated bytes, Playwright's internal blank page).
+ */
+const SAFE_NON_NETWORK_SCHEMES = new Set(['data:', 'blob:', 'about:', 'chrome-error:', 'filesystem:']);
+
+/** Network schemes we validate like http/https. Anything else (file:, ftp:, etc.) is refused outright. */
+const VALIDATED_NETWORK_SCHEMES = new Set(['http:', 'https:', 'ws:', 'wss:']);
+
+/**
+ * Gatekeeper applied to EVERY request a page makes — not just the top-level
+ * document — so an <img>, <script>, stylesheet, font, XHR/fetch, WebSocket,
+ * or redirect hop cannot be used to reach a private/internal address even
+ * when the top-level navigation target was public. This closes the gap a
+ * document-only check would leave open (SSRF via subresources).
+ *
+ * `cache` is a per-capture Map<hostname, {allow, reason}> so repeated
+ * subresources from the same host (e.g. a CDN serving dozens of images)
+ * don't trigger a fresh DNS lookup each time. Residual risk: this is still
+ * an application-level check, not a pinned connection — see the
+ * "DNS rebinding" note in README.md for why a perfect guarantee would
+ * require a forward proxy that controls the actual socket, which this tool
+ * does not implement.
+ */
+async function evaluateRequestUrl(rawUrl, cache) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return { allow: false, reason: `Malformed request URL: ${rawUrl}` };
+  }
+  if (SAFE_NON_NETWORK_SCHEMES.has(parsed.protocol)) {
+    return { allow: true };
+  }
+  if (!VALIDATED_NETWORK_SCHEMES.has(parsed.protocol)) {
+    return { allow: false, reason: `Blocked non-http(s) request scheme "${parsed.protocol}" for ${rawUrl}` };
+  }
+  const hostKey = parsed.hostname.toLowerCase();
+  if (cache?.has(hostKey)) {
+    return cache.get(hostKey);
+  }
+  let result;
+  try {
+    await assertHostIsPublic(parsed.hostname);
+    result = { allow: true };
+  } catch (err) {
+    result = { allow: false, reason: err.message };
+  }
+  cache?.set(hostKey, result);
+  return result;
+}
+
+/** Runs inside the page; must not depend on anything outside the DOM/window it's given. */
+function extractPageData() {
+  function visibleText(el) {
+    if (!el) return '';
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') return '';
+    return (el.innerText || el.textContent || '').trim();
+  }
+
+  function isCtaLike(text, role) {
+    if (!text) return false;
+    const t = text.toLowerCase();
+    const ctaWords = [
+      'buy', 'comprar', 'subscribe', 'assinar', 'start', 'começar', 'comece',
+      'get', 'obter', 'join', 'inscre', 'order', 'pedido', 'sign up', 'signup',
+      'cadastr', 'try', 'teste', 'download', 'baixar', 'enroll', 'matricul',
+      'quero', 'acessar', 'garantir', 'learn more', 'saiba mais', 'add to cart',
+      'checkout', 'register', 'book', 'agendar', 'call', 'demo', 'request',
+    ];
+    return role === 'button' || ctaWords.some((w) => t.includes(w));
+  }
+
+  const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6')).map((el, i) => ({
+    index: i,
+    tag: el.tagName.toLowerCase(),
+    text: visibleText(el).slice(0, 300),
+  })).filter((h) => h.text.length > 0);
+
+  const links = Array.from(document.querySelectorAll('a[href]')).map((el) => ({
+    text: visibleText(el).slice(0, 200),
+    href: el.getAttribute('href'),
+  })).filter((l) => l.text || l.href);
+
+  const buttons = Array.from(document.querySelectorAll('button, [role="button"], input[type="submit"], input[type="button"]')).map((el) => ({
+    text: (visibleText(el) || el.getAttribute('value') || el.getAttribute('aria-label') || '').slice(0, 200),
+    tag: el.tagName.toLowerCase(),
+  })).filter((b) => b.text);
+
+  const images = Array.from(document.querySelectorAll('img')).map((el) => ({
+    src: el.getAttribute('src') || el.getAttribute('data-src') || null,
+    alt: el.getAttribute('alt') || '',
+    width: el.naturalWidth || null,
+    height: el.naturalHeight || null,
+  })).slice(0, 500);
+
+  const forms = Array.from(document.querySelectorAll('form')).map((form) => ({
+    action: form.getAttribute('action') || null,
+    method: (form.getAttribute('method') || 'get').toLowerCase(),
+    fieldCount: form.querySelectorAll('input, textarea, select').length,
+    fieldTypes: Array.from(form.querySelectorAll('input')).map((i) => i.type).slice(0, 30),
+    submitLabel: (() => {
+      const btn = form.querySelector('button, input[type="submit"]');
+      return btn ? (visibleText(btn) || btn.getAttribute('value') || '').slice(0, 120) : null;
+    })(),
+  }));
+
+  const ctaCandidates = [...buttons, ...links.map((l) => ({ text: l.text, tag: 'a', href: l.href }))]
+    .filter((el) => isCtaLike(el.text, el.tag === 'button' ? 'button' : 'link'))
+    .slice(0, 60);
+
+  // Approximate block/section order by walking top-level semantic containers in DOM order.
+  const blockSelector = 'section, header, footer, main, article, [data-section], .section';
+  let blocks = Array.from(document.querySelectorAll(blockSelector));
+  if (blocks.length === 0) {
+    // Fallback: direct children of body as a rough proxy for visual blocks.
+    blocks = Array.from(document.body.children);
+  }
+  const blockOrder = blocks.slice(0, 80).map((el, i) => {
+    const rect = el.getBoundingClientRect();
+    const heading = el.querySelector('h1,h2,h3');
     return {
-      title: document.title || '', description: document.querySelector('meta[name="description"]')?.content || '',
-      language: document.documentElement.lang || '', text: (document.body?.innerText || '').slice(0, limit),
-      headings, links, buttons, ctas, images, forms, sections,
-      documentWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth,
-      horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 2
+      index: i,
+      tag: el.tagName.toLowerCase(),
+      id: el.id || null,
+      approxTopPx: Math.round(rect.top + window.scrollY),
+      headingText: heading ? visibleText(heading).slice(0, 150) : null,
+      textPreview: visibleText(el).slice(0, 180),
     };
-  }, LIMIT);
-}
-async function runDevice(browser, initialUrl, name, viewport, out, evidence, timeout) {
-  const mobile = name === 'mobile';
-  const context = await browser.newContext({
-    viewport, deviceScaleFactor: 1, isMobile: mobile, hasTouch: mobile,
-    locale: 'pt-BR', serviceWorkers: 'block', acceptDownloads: false
-  });
-  const page = await context.newPage();
-  page.setDefaultNavigationTimeout(timeout);
-  const redirects = [];
-  await page.route('**/*', async route => {
-    const target = route.request().url();
-    try {
-      await validatePublicUrl(target);
-      await route.continue();
-    } catch (err) {
-      if (route.request().isNavigationRequest()) {
-        evidence.errors.push(name + ': navegação bloqueada: ' + cut(target, 250) + ' (' + err.message + ')');
-      }
-      await route.abort('blockedbyclient').catch(() => {});
-    }
-  });
-  page.on('request', req => {
-    if (req.isNavigationRequest() && req.frame() === page.mainFrame()) {
-      if (!redirects.includes(req.url())) redirects.push(req.url());
-    }
-  });
-  try {
-    const response = await page.goto(initialUrl, { waitUntil: 'domcontentloaded', timeout });
-    await page.waitForTimeout(800);
-    const final = await validatePublicUrl(page.url());
-    const data = await inspect(page);
-    const image = name + '.png';
-    await page.screenshot({ path: path.join(out, image), fullPage: true, animations: 'disabled', timeout });
-    evidence.devices[name] = {
-      viewport, url: final.href, httpStatus: response?.status() ?? null,
-      screenshot: image, ...data
-    };
-    if (data.horizontalOverflow) evidence.errors.push(name + ': possível overflow horizontal');
-    if (!evidence.finalUrl) evidence.finalUrl = final.href;
-    for (const u of redirects) if (!evidence.redirects.includes(u)) evidence.redirects.push(u);
-  } catch (err) {
-    evidence.errors.push(name + ': ' + cut(err.message, 600));
-    evidence.devices[name] = { viewport, screenshot: null, status: 'Não verificado', redirects };
-  } finally {
-    await context.close();
-  }
-}
-export async function capture(args) {
-  const out = resolveOutputDir(args.out, args.url);
-  const evidence = {
-    schemaVersion: 1, requestedUrl: args.url, finalUrl: null,
-    timestamp: new Date().toISOString(), status: 'failed', redirects: [], devices: {}, errors: []
+  }).sort((a, b) => a.approxTopPx - b.approxTopPx);
+
+  const bodyText = visibleText(document.body).slice(0, 50_000);
+
+  return {
+    title: document.title || null,
+    metaDescription: document.querySelector('meta[name="description"]')?.getAttribute('content') || null,
+    lang: document.documentElement.lang || null,
+    headings,
+    links,
+    buttons,
+    images,
+    forms,
+    ctaCandidates,
+    blockOrder,
+    bodyTextSample: bodyText,
+    counts: {
+      headings: headings.length,
+      links: links.length,
+      buttons: buttons.length,
+      images: images.length,
+      forms: forms.length,
+    },
   };
-  await mkdir(out, { recursive: true });
-  let browser;
-  try {
-    const url = await validatePublicUrl(args.url);
-    let playwright;
-    try { playwright = await import('playwright'); }
-    catch { throw new Error('Playwright ausente: execute npm ci'); }
-    try { browser = await playwright.chromium.launch({ headless: true }); }
-    catch { throw new Error('Chromium ausente: execute npx playwright install chromium'); }
-    const timeout = args.timeout || 20000;
-    await runDevice(browser, url.href, 'desktop', { width: 1440, height: 900 }, out, evidence, timeout);
-    await runDevice(browser, url.href, 'mobile', { width: 390, height: 844 }, out, evidence, timeout);
-    evidence.status = evidence.devices.desktop?.screenshot && evidence.devices.mobile?.screenshot ? 'complete' : 'partial';
-  } catch (err) {
-    evidence.errors.push(cut(err.message, 600));
-  } finally {
-    if (browser) await browser.close().catch(() => {});
-    await save(out, evidence);
-  }
-  return { out, evidence };
 }
-const self = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (self) {
-  try {
-    const args = parse(process.argv.slice(2));
-    const result = await capture(args);
-    console.log('Evidências: ' + result.out);
-    console.log('Status: ' + result.evidence.status);
-    if (result.evidence.status !== 'complete') {
-      console.error(result.evidence.errors.join('\n'));
-      process.exitCode = 1;
+
+async function captureViewport(browser, { url, viewport, userAgent, label, timeout }) {
+  const context = await browser.newContext({
+    viewport,
+    userAgent,
+    deviceScaleFactor: label === 'mobile' ? 2 : 1,
+    isMobile: label === 'mobile',
+    hasTouch: label === 'mobile',
+    ignoreHTTPSErrors: false,
+  });
+
+  const redirectChain = [];
+  const consoleErrors = [];
+  const limitations = [];
+
+  const page = await context.newPage();
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text().slice(0, 300));
+  });
+  page.on('response', (response) => {
+    const status = response.status();
+    if (status >= 300 && status < 400) {
+      redirectChain.push({ from: response.url(), status });
     }
+  });
+
+  // Validate EVERY request the page makes — top-level navigation (including
+  // each redirect hop, since Chromium re-issues a request per hop and each
+  // one passes back through this handler), and every subresource (images,
+  // scripts, stylesheets, fonts, fetch/XHR, WebSocket, media). This closes
+  // the SSRF gap a document-only check leaves open: a page could otherwise
+  // reference an internal URL in an <img>, background-image, fetch() call,
+  // or WebSocket connection even when the top-level page itself is public.
+  const hostValidationCache = new Map();
+  const blockedHostsSeen = new Set();
+  await context.route('**/*', async (route, request) => {
+    const { allow, reason } = await evaluateRequestUrl(request.url(), hostValidationCache);
+    if (!allow) {
+      const key = `${request.resourceType()}:${reason}`;
+      if (!blockedHostsSeen.has(key)) {
+        blockedHostsSeen.add(key);
+        limitations.push(`Blocked ${request.resourceType()} request: ${reason}`);
+      }
+      await route.abort('blockedbyclient');
+      return;
+    }
+    await route.continue();
+  });
+
+  let navigationError = null;
+  let response = null;
+  try {
+    response = await page.goto(url, { waitUntil: 'load', timeout });
   } catch (err) {
-    console.error(err.message);
+    navigationError = err.message;
+  }
+
+  if (!navigationError) {
+    try {
+      await page.waitForLoadState('networkidle', { timeout: 8_000 });
+    } catch {
+      limitations.push('Network did not reach idle state within 8s; page may use continuous background activity (ads, trackers, chat widgets).');
+    }
+    // Let lazy-loaded sections/images settle without interacting with the page.
+    await page.waitForTimeout(800);
+  }
+
+  const finalUrl = page.url();
+
+  let extracted = null;
+  let antiBotSuspected = false;
+  if (!navigationError) {
+    try {
+      extracted = await page.evaluate(extractPageData);
+    } catch (err) {
+      limitations.push(`DOM extraction failed: ${err.message}`);
+    }
+    const bodyLower = (extracted?.bodyTextSample || '').toLowerCase();
+    if (
+      /captcha|are you a human|verify you are human|access denied|checking your browser|cloudflare/.test(bodyLower) &&
+      (extracted?.counts.headings ?? 0) < 2
+    ) {
+      antiBotSuspected = true;
+      limitations.push('Page content suggests a bot/CAPTCHA challenge or access block; extraction may be unreliable.');
+    }
+  }
+
+  let screenshotPath = null;
+  const outDirForShot = captureViewport.__outDir;
+  if (!navigationError) {
+    try {
+      screenshotPath = path.join(outDirForShot, `${label}.png`);
+      await page.screenshot({ path: screenshotPath, fullPage: true, timeout: 30_000 });
+    } catch (err) {
+      limitations.push(`Screenshot failed: ${err.message}`);
+      screenshotPath = null;
+    }
+  }
+
+  await context.close();
+
+  return {
+    label,
+    requestedUrl: url,
+    finalUrl,
+    httpStatus: response?.status() ?? null,
+    navigationError,
+    redirectChain,
+    consoleErrors: consoleErrors.slice(0, 20),
+    antiBotSuspected,
+    limitations,
+    screenshotPath,
+    extracted,
+  };
+}
+
+function buildSummaryMarkdown({ url, startedAt, desktop, mobile }) {
+  const lines = [];
+  lines.push(`# Capture Summary`);
+  lines.push('');
+  lines.push(`- **Requested URL:** ${url}`);
+  lines.push(`- **Captured at:** ${startedAt}`);
+  lines.push(`- **Final URL (desktop):** ${desktop.finalUrl}`);
+  lines.push(`- **Final URL (mobile):** ${mobile.finalUrl}`);
+  lines.push('');
+
+  for (const result of [desktop, mobile]) {
+    lines.push(`## ${result.label === 'desktop' ? 'Desktop (1440×900)' : 'Mobile (390×844)'}`);
+    if (result.navigationError) {
+      lines.push(`- **Navigation failed:** ${result.navigationError}`);
+    } else {
+      lines.push(`- HTTP status: ${result.httpStatus ?? 'unknown'}`);
+      lines.push(`- Screenshot: ${result.screenshotPath ? path.basename(result.screenshotPath) : 'not captured'}`);
+      if (result.extracted) {
+        const c = result.extracted.counts;
+        lines.push(`- Headings: ${c.headings}, Links: ${c.links}, Buttons: ${c.buttons}, Images: ${c.images}, Forms: ${c.forms}`);
+      }
+      if (result.redirectChain.length) {
+        lines.push(`- Redirects: ${result.redirectChain.length}`);
+      }
+      if (result.antiBotSuspected) {
+        lines.push(`- ⚠️ Possible anti-bot/CAPTCHA block detected — treat extraction as unreliable.`);
+      }
+    }
+    if (result.limitations.length) {
+      lines.push(`- Limitations:`);
+      for (const l of result.limitations) lines.push(`  - ${l}`);
+    }
+    lines.push('');
+  }
+
+  lines.push('## Notes');
+  lines.push('- No forms were submitted, no logins attempted, no purchases made.');
+  lines.push('- Only publicly reachable pages were accessed; private/internal/local destinations are refused automatically.');
+  lines.push('- This capture is raw evidence. It does not contain the audit, score, or recommendations — those are produced by the sales-page-auditor skill from this evidence.');
+  lines.push('');
+  return lines.join('\n');
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const startedAt = new Date().toISOString();
+
+  const validatedUrl = await assertUrlIsSafe(args.url);
+
+  const outDir = args.out
+    ? path.resolve(args.out)
+    : path.resolve(process.cwd(), 'output', slugify(args.url));
+  await fs.mkdir(outDir, { recursive: true });
+  captureViewport.__outDir = outDir;
+
+  const browser = await chromium.launch({ headless: true });
+  let desktop;
+  let mobile;
+  try {
+    desktop = await captureViewport(browser, {
+      url: validatedUrl.toString(),
+      viewport: DESKTOP_VIEWPORT,
+      userAgent: USER_AGENT_DESKTOP,
+      label: 'desktop',
+      timeout: args.timeout,
+    });
+    mobile = await captureViewport(browser, {
+      url: validatedUrl.toString(),
+      viewport: MOBILE_VIEWPORT,
+      userAgent: USER_AGENT_MOBILE,
+      label: 'mobile',
+      timeout: args.timeout,
+    });
+  } finally {
+    await browser.close();
+  }
+
+  const evidence = {
+    tool: 'sales-page-auditor/capture.mjs',
+    version: '1.0.0',
+    requestedUrl: args.url,
+    capturedAt: startedAt,
+    viewports: {
+      desktop: DESKTOP_VIEWPORT,
+      mobile: MOBILE_VIEWPORT,
+    },
+    desktop,
+    mobile,
+  };
+
+  await fs.writeFile(path.join(outDir, 'evidence.json'), JSON.stringify(evidence, null, 2), 'utf8');
+  const summary = buildSummaryMarkdown({ url: args.url, startedAt, desktop, mobile });
+  await fs.writeFile(path.join(outDir, 'summary.md'), summary, 'utf8');
+
+  console.log(`Capture complete: ${outDir}`);
+  console.log(`  desktop: ${desktop.navigationError ? 'FAILED - ' + desktop.navigationError : 'ok'}`);
+  console.log(`  mobile:  ${mobile.navigationError ? 'FAILED - ' + mobile.navigationError : 'ok'}`);
+  console.log(`  evidence.json, summary.md written.`);
+
+  if (desktop.navigationError && mobile.navigationError) {
     process.exitCode = 2;
   }
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    if (err instanceof UnsafeUrlError) {
+      console.error(`Refused: ${err.message}`);
+      process.exitCode = 3;
+    } else {
+      console.error(`Capture failed: ${err.stack || err.message}`);
+      process.exitCode = 1;
+    }
+  });
+}
+
+export {
+  assertUrlIsSafe,
+  assertHostIsPublic,
+  evaluateRequestUrl,
+  isPrivateIp,
+  isPrivateIPv4,
+  isPrivateIPv6,
+  slugify,
+  UnsafeUrlError,
+};

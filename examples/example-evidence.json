@@ -1,0 +1,96 @@
+{
+  "tool": "sales-page-auditor/capture.mjs",
+  "version": "1.0.0",
+  "requestedUrl": "https://pagina-ficticia-exemplo.test/curso-x",
+  "capturedAt": "2026-01-01T12:00:00.000Z",
+  "note": "DADOS FICTÍCIOS — exemplo de formato apenas, não é uma captura real.",
+  "viewports": {
+    "desktop": { "width": 1440, "height": 900 },
+    "mobile": { "width": 390, "height": 844 }
+  },
+  "desktop": {
+    "label": "desktop",
+    "requestedUrl": "https://pagina-ficticia-exemplo.test/curso-x",
+    "finalUrl": "https://pagina-ficticia-exemplo.test/curso-x",
+    "httpStatus": 200,
+    "navigationError": null,
+    "redirectChain": [],
+    "consoleErrors": [],
+    "antiBotSuspected": false,
+    "limitations": [],
+    "screenshotPath": "output/pagina-ficticia-exemplo-test-curso-x/desktop.png",
+    "extracted": {
+      "title": "Curso Fictício X — Aprenda algo",
+      "metaDescription": "Exemplo fictício de meta description.",
+      "lang": "pt-BR",
+      "headings": [
+        { "index": 0, "tag": "h1", "text": "Aprenda [algo] em 30 dias (exemplo fictício)" },
+        { "index": 1, "tag": "h2", "text": "Como funciona" },
+        { "index": 2, "tag": "h2", "text": "O que você recebe" }
+      ],
+      "links": [
+        { "text": "Começar agora", "href": "#oferta" }
+      ],
+      "buttons": [
+        { "text": "Quero começar agora", "tag": "button" }
+      ],
+      "images": [
+        { "src": "/img/hero-exemplo.jpg", "alt": "Pessoa fictícia sorrindo", "width": 1200, "height": 800 }
+      ],
+      "forms": [
+        { "action": "/checkout-exemplo", "method": "post", "fieldCount": 3, "fieldTypes": ["email", "text", "tel"], "submitLabel": "Finalizar inscrição" }
+      ],
+      "ctaCandidates": [
+        { "text": "Quero começar agora", "tag": "button" },
+        { "text": "Começar agora", "tag": "a", "href": "#oferta" }
+      ],
+      "blockOrder": [
+        { "index": 0, "tag": "header", "id": null, "approxTopPx": 0, "headingText": null, "textPreview": "Logo fictício" },
+        { "index": 1, "tag": "section", "id": "hero", "approxTopPx": 80, "headingText": "Aprenda [algo] em 30 dias (exemplo fictício)", "textPreview": "Headline + subheadline fictícias" },
+        { "index": 2, "tag": "section", "id": "como-funciona", "approxTopPx": 900, "headingText": "Como funciona", "textPreview": "3 passos fictícios" },
+        { "index": 3, "tag": "section", "id": "oferta", "approxTopPx": 1800, "headingText": "O que você recebe", "textPreview": "Lista de bônus fictícios" },
+        { "index": 4, "tag": "footer", "id": null, "approxTopPx": 2600, "headingText": null, "textPreview": "Rodapé fictício" }
+      ],
+      "bodyTextSample": "Texto completo fictício da página, usado apenas como exemplo de formato...",
+      "counts": { "headings": 3, "links": 1, "buttons": 1, "images": 1, "forms": 1 }
+    }
+  },
+  "mobile": {
+    "label": "mobile",
+    "requestedUrl": "https://pagina-ficticia-exemplo.test/curso-x",
+    "finalUrl": "https://pagina-ficticia-exemplo.test/curso-x",
+    "httpStatus": 200,
+    "navigationError": null,
+    "redirectChain": [],
+    "consoleErrors": [],
+    "antiBotSuspected": false,
+    "limitations": [
+      "Exemplo fictício: em uma captura real, limitações como timeouts ou avisos de conteúdo dinâmico apareceriam aqui."
+    ],
+    "screenshotPath": "output/pagina-ficticia-exemplo-test-curso-x/mobile.png",
+    "extracted": {
+      "title": "Curso Fictício X — Aprenda algo",
+      "metaDescription": "Exemplo fictício de meta description.",
+      "lang": "pt-BR",
+      "headings": [
+        { "index": 0, "tag": "h1", "text": "Aprenda [algo] em 30 dias (exemplo fictício)" }
+      ],
+      "links": [],
+      "buttons": [
+        { "text": "Quero começar agora", "tag": "button" }
+      ],
+      "images": [
+        { "src": "/img/hero-exemplo.jpg", "alt": "Pessoa fictícia sorrindo", "width": 390, "height": 260 }
+      ],
+      "forms": [],
+      "ctaCandidates": [
+        { "text": "Quero começar agora", "tag": "button" }
+      ],
+      "blockOrder": [
+        { "index": 0, "tag": "section", "id": "hero", "approxTopPx": 0, "headingText": "Aprenda [algo] em 30 dias (exemplo fictício)", "textPreview": "Headline fictícia" }
+      ],
+      "bodyTextSample": "Texto completo fictício da versão mobile...",
+      "counts": { "headings": 1, "links": 0, "buttons": 1, "images": 1, "forms": 0 }
+    }
+  }
+}
