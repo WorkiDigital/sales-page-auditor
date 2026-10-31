@@ -1,0 +1,36 @@
+name: Validate Sales Page Auditor
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Public page capture smoke test
+        run: npm run smoke
+      - name: Check smoke evidence
+        run: |
+          test -s output/smoke/desktop.png
+          test -s output/smoke/mobile.png
+          test -s output/smoke/evidence.json
+          test -s output/smoke/summary.md
+      - name: Remove any captured pages from job workspace
+        if: always()
+        run: rm -rf output/
