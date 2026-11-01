@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Magra 7D — redesign mobile (rascunho local)</title>
+<style>
+:root{--bg:#0e0c12;--card:#1d1722;--ink:#fff;--mut:#cfc8d2;--lime:#c8ff1a;--pink:#e91e8c;--paper:#f8f5f0;--dark:#1d171f}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;padding-bottom:84px}
+h1,h2{line-height:1.08;letter-spacing:-.02em;margin:0 0 12px}
+h1{font-size:30px}h2{font-size:27px}
+section{padding:36px 20px}
+.light{background:var(--paper);color:var(--dark)}
+.lime{color:var(--lime)}.pink{color:var(--pink)}
+.btn{display:block;text-align:center;background:var(--lime);color:#0b0b0b;font-weight:800;text-decoration:none;padding:16px;border-radius:999px;min-height:48px}
+.small{font-size:14px;color:var(--mut)}.light .small{color:#5a525c}
+/* hero compacto: H1 começa acima de 45% da tela */
+.top{display:flex;align-items:center;gap:12px;padding:12px 20px;background:linear-gradient(120deg,#5a0b35,#0e0c12)}
+.top img,.top .ph{width:84px;height:84px;border-radius:12px;object-fit:cover;background:#333;flex:none}
+.top b{font-size:26px}
+.strip{background:var(--lime);color:#0b0b0b;font-weight:800;font-size:13px;text-align:center;padding:8px}
+.auth{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0;font-size:13px;text-align:center}
+.auth span{background:var(--card);border-radius:10px;padding:8px 4px}.auth b{display:block;color:var(--lime)}
+ul.check{list-style:none;padding:0;margin:16px 0}
+ul.check li{padding:6px 0 6px 28px;position:relative}
+ul.check li:before{content:"✓";position:absolute;left:0;color:var(--lime);font-weight:800}
+.legal{font-size:14px;color:#cfc8d2;line-height:1.45}  /* era 11px */
+.price{text-align:center}.price big{display:block;font-size:44px;font-weight:900;color:var(--lime)}
+s{opacity:.7}
+/* prova: carrossel horizontal com ampliar */
+.rail{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 0 12px;margin:0 -20px;padding-left:20px}
+.rail figure{flex:0 0 78%;scroll-snap-align:start;margin:0;background:#fff;border-radius:16px;padding:10px;box-shadow:0 2px 10px #0002}
+.rail .ph{height:220px;background:#111;border-radius:10px;display:grid;place-items:center;color:#aaa;font-size:13px;text-align:center;padding:10px}
+.rail figcaption{font-size:14px;margin-top:8px}
+details{background:#fff;color:var(--dark);border-radius:14px;margin:8px 0;padding:14px 16px}
+summary{font-weight:700;cursor:pointer;min-height:24px}
+/* barra fixa: só aparece quando o CTA do hero sai da tela */
+.sticky{position:fixed;left:12px;right:12px;bottom:12px;z-index:9;transform:translateY(140%);transition:transform .25s}
+.sticky.on{transform:none}
+.sticky .btn{box-shadow:0 6px 24px #000a}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <!-- [placeholder: logo Magra 7D e foto da Dra. Mari (mari-top.webp)] -->
+  <div class="ph"></div>
+  <div><b>Magra<span class="lime">7D</span></b><div class="small">com Dra. Mari Ferri · desafio de novembro</div></div>
+</div>
+<div class="strip">23 DE NOVEMBRO · 100% ONLINE · ACESSO POR 1 ANO</div>
+
+<section id="inicio">
+  <p class="pink" style="font-weight:700;margin:0 0 8px">Você não falhou nas dietas. As dietas falharam com você.</p>
+  <h1>Perca até <span class="lime">4 kg em 7 dias</span> sem dieta maluca, sem academia obrigatória e sem passar fome.</h1>
+  <!-- Autoridade subiu: antes só aparecia depois da oferta -->
+  <div class="auth">
+    <span><b>6 anos</b>no É de Casa, TV Globo</span>
+    <span><b>+30 mil</b>pessoas acompanhadas</span>
+    <span><b>CRN 3</b>23786</span>
+  </div>
+  <ul class="check">
+    <li>7 dias de conteúdo intensivo</li>
+    <li>1 live por dia com a Dra. Mari Ferri</li>
+    <li>Material de preparação 5 dias antes</li>
+    <li>Estratégias detox e jejum com orientação</li>
+    <li>Acesso ao conteúdo por 1 ano</li>
+  </ul>
+  <a id="hero-cta" class="btn" href="https://pay.hotmart.com/J98590202L?off=lossxz9g">QUERO PARTICIPAR POR R$ 67 →</a>
+  <p class="small" style="text-align:center;margin:8px 0">🔒 Pagamento pela Hotmart · 9x de R$ 8,80 ou R$ 67 à vista</p>
+  <p class="legal">A campanha apresenta possibilidade de perder até 4 kg em 7 dias. Resultados dependem de fatores individuais e não são garantidos.</p>
+</section>
+
+<section class="light" id="oferta">
+  <h2>O que você vai receber no <span class="pink">Magra 7D</span></h2>
+  <ul class="check">
+    <li>7 dias de conteúdo intensivo</li>
+    <li>7 lives com a Dra. Mari Ferri</li>
+    <li>Protocolo de emagrecimento rápido</li>
+    <li>Estratégias detox e orientações alimentares</li>
+    <li>Técnicas de jejum intermitente com cuidados de segurança</li>
+    <li>Material preparatório 5 dias antes do início</li>
+    <li>Acesso ao conteúdo por 1 ano completo</li>
+  </ul>
+  <div class="price" style="background:var(--bg);color:#fff;border-radius:18px;padding:22px 16px">
+    <div class="small" style="color:var(--lime);font-weight:700">OFERTA ESPECIAL DE BLACK · INÍCIO EM 23/11/2026</div>
+    <div>De <s>R$ 197,00</s> por apenas</div>
+    <big>9x de R$ 8,80</big>
+    <div>ou R$ 67,00 à vista</div>
+    <!-- [placeholder: data final da oferta Black, se existir] -->
+    <!-- [placeholder: garantia/política de reembolso, somente se existir de fato] -->
+    <a class="btn" style="margin-top:16px" href="https://pay.hotmart.com/J98590202L?off=lossxz9g">GARANTIR MINHA VAGA →</a>
+    <div class="small" style="margin-top:8px">Checkout seguro via Hotmart</div>
+  </div>
+</section>
+
+<section class="light" id="depoimentos" style="padding-top:8px">
+  <h2>Elas viveram o desafio — <span class="pink">e olha o que contaram.</span></h2>
+  <p class="small">Prints de participantes de desafios anteriores da Mari Ferri. Deslize para ver mais; toque para ampliar.</p>
+  <div class="rail">
+    <!-- Só prints sobre acompanhamento/aulas/qualidade. Prints com resultado de 21 dias ficam fora ou legendados. -->
+    <figure><div class="ph">[placeholder: print do depoimento 01 — acompanhamento]</div><figcaption>“Primeira vez que vejo uma profissional ver exames com tanta atenção…”</figcaption></figure>
+    <figure><div class="ph">[placeholder: print do depoimento 02 — aulas]</div><figcaption>“Foi maravilhoso ontem… Parabéns por compartilhar seus conhecimentos!”</figcaption></figure>
+    <figure><div class="ph">[placeholder: print do depoimento 05 — live]</div><figcaption>“Depois dessa live percebi que é ainda mais… Gratidão!!”</figcaption></figure>
+    <figure><div class="ph">[placeholder: print do depoimento 08 — qualidade]</div><figcaption>“Nunca participei de um desafio com tanta qualidade!”</figcaption></figure>
+  </div>
+  <p class="legal" style="color:#5a525c">Experiências individuais de desafios anteriores; não equivalem a resultados garantidos do Magra 7D de novembro de 2026.</p>
+</section>
+
+<section id="metodo">
+  <h2>Um passo prepara o próximo. <span class="lime">Entenda o método.</span></h2>
+  <!-- 4 pilares + 3 caminhos + jejum fundidos em um bloco -->
+  <details open><summary>01 · Ativação metabólica</summary><p class="small" style="color:#444">Entenda hábitos que influenciam o uso de energia pelo organismo e aprenda a organizar a alimentação de maneira prática.</p></details>
+  <details><summary>02 · Sem efeito sanfona</summary><p class="small" style="color:#444">Sair da lógica de restrições extremas e construir uma rotina mais sustentável. Nenhum método garante impedir o reganho de peso.</p></details>
+  <details><summary>03 · Protocolo de 7 dias</summary><p class="small" style="color:#444">Sequência de conteúdos, com preparação cinco dias antes e um encontro ao vivo por dia com a nutricionista.</p></details>
+  <details><summary>04 · Ciclo de reset hormonal</summary><p class="small" style="color:#444">Papel do sono, da alimentação e da rotina na saúde metabólica. “Reset hormonal” é o nome da abordagem na campanha, não uma garantia de alteração hormonal.</p></details>
+  <details><summary>Jejum feito do jeito certo</summary><p class="small" style="color:#444">O jejum não é adequado para todas as pessoas, especialmente sem avaliação individual em casos de diabetes, gravidez, amamentação, histórico de transtornos alimentares ou uso de determinados medicamentos.</p></details>
+  <h2 style="margin-top:28px">Como funciona em 4 passos</h2>
+  <ul class="check">
+    <li><b>1. Receba a preparação</b> — material 5 dias antes do início.</li>
+    <li><b>2. Acompanhe as lives</b> — um encontro ao vivo por dia.</li>
+    <li><b>3. Aprenda estratégias</b> — alimentação, detox e jejum com orientação.</li>
+    <li><b>4. Revisite o material</b> — acesso por 1 ano.</li>
+  </ul>
+</section>
+
+<section class="light" id="faq">
+  <h2>Antes de garantir sua vaga</h2>
+  <!-- [placeholder: respostas completas do FAQ original, copiar da página atual] -->
+  <details><summary>Quando começa o desafio?</summary><p>[placeholder: resposta]</p></details>
+  <details><summary>Preciso fazer academia para participar?</summary><p>[placeholder: resposta]</p></details>
+  <details><summary>Quando recebo os materiais?</summary><p>[placeholder: resposta]</p></details>
+  <details><summary>Quanto tempo tenho de acesso?</summary><p>[placeholder: resposta]</p></details>
+  <details><summary>É garantido emagrecer 4 kg em 7 dias?</summary><p>[placeholder: resposta]</p></details>
+  <details><summary>Tenho uma condição de saúde ou uso medicamentos. Posso fazer jejum?</summary><p>[placeholder: resposta]</p></details>
+</section>
+
+<footer class="section legal" style="padding:24px 20px;background:#0a090d">
+  <b class="lime">MAGRA 7D · DRA. MARI FERRI</b><br>
+  Conteúdo educativo. Resultados variam de pessoa para pessoa. Confira as condições da oferta no checkout.
+  <br>[placeholder: links de Política de Privacidade e Termos de Uso]
+</footer>
+
+<div class="sticky" id="sticky"><a class="btn" href="https://pay.hotmart.com/J98590202L?off=lossxz9g">GARANTIR MINHA VAGA · R$ 67 →</a></div>
+
+<script>
+// Barra fixa só aparece depois que o CTA do hero sai da tela (evita sobrepor o botão e o 5º bullet)
+const hero=document.getElementById('hero-cta'),bar=document.getElementById('sticky');
+new IntersectionObserver(([e])=>bar.classList.toggle('on',!e.isIntersecting)).observe(hero);
+</script>
+</body>
+</html>

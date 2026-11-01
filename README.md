@@ -134,6 +134,50 @@ parcial baseada no que conseguir obter (ex.: texto via outra ferramenta de
 fetch, se disponível), marca os critérios visuais (6 e 7 da rubrica) como
 N/A, e informa isso claramente no relatório — nunca inventa screenshots.
 
+## Usar em um chat novo ou em outro projeto
+
+Tudo o que a auditoria precisa vem neste repositório (skill, referências,
+rubrica, `capture.mjs`, `verify.mjs`, CI). Cada chat é independente, então:
+
+1. **Abra uma sessão nova do Claude Code Cloud com este repositório
+   (`WorkiDigital/sales-page-auditor`)** e rode, a cada sessão:
+   ```bash
+   npm install
+   npm run install:browser
+   ```
+   O Chromium não persiste entre sessões efêmeras.
+2. **Use a skill:** `/sales-page-auditor https://suapagina.com`
+   (aceita instruções complementares, ex.: `foco visual mobile`).
+3. **Dê o contexto no primeiro recado** (URL, objetivo, onde está o código
+   da página, se for editar). O chat novo não lembra de conversas anteriores.
+4. **Outro projeto:** adicione o repositório dele à mesma sessão ou copie
+   `.claude/skills/sales-page-auditor/` e `scripts/` para o repositório dele.
+   No Cloud a skill só existe se o repositório dela estiver na sessão.
+
+### O que NÃO vem com o repositório
+
+| Item | Como tratar |
+|---|---|
+| Chromium | `npm run install:browser` a cada sessão nova |
+| Memória de conversas anteriores | Reexplicar o contexto no primeiro recado |
+| Deploy (Vercel etc.) | Não é função da ferramenta (ver `CLAUDE.md`, regra 10). Se o usuário pedir, é uma ação manual da sessão, com token fornecido como **variável de ambiente secreta**, nunca colado no chat nem commitado |
+| Edição/redesign de páginas | Não é um script: o agente segue a skill e o pedido, sobre o código a que tiver acesso. Mantenha o código da página em um repositório próprio, ele não é guardado aqui |
+| Skills externas de copy/design | Opcionais; só entram se estiverem instaladas na sessão |
+
+### Checklist para a primeira dobra mobile
+
+Ao auditar ou ajustar uma página, validar em 390×844 e 360×740 (a captura
+padrão usa 390×844):
+
+- O título completo aparece sem rolar, acima de qualquer botão fixo.
+- Data, duração e preço (ou "a partir de") estão visíveis na primeira tela
+  ou no botão fixo.
+- Há uma ação principal visível, com o mesmo texto em todos os CTAs.
+- Corpo do texto com pelo menos 14px; textos auxiliares com pelo menos 11-12px.
+- Logos e imagens com transparência não ficam ilegíveis em nenhuma variante
+  responsiva (`srcset`): conferir se a versão menor manteve o canal alfa.
+- Sem rolagem horizontal.
+
 ## Metodologias incorporadas
 
 Ver `references/FRAMEWORKS.md` para o detalhamento. Em resumo, a auditoria
